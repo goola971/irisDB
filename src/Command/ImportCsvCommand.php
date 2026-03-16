@@ -44,15 +44,14 @@ class ImportCsvCommand extends Command
         }
 
         $handle = fopen($file, 'r');
-        fgetcsv($handle, 0, ';'); // Sauter l'entête
+        fgetcsv($handle, 0, ';');
 
-        // 1. Gérer l'Admin par défaut (obligatoire pour Region)
         $admin = $this->em->getRepository(Admin::class)->findOneBy([]) ?? new Admin();
         if (!$admin->getId()) {
             $admin->setUsername('admin_system');
             $admin->setPassword('password_hash'); 
             $this->em->persist($admin);
-            $this->em->flush(); // On flush l'admin tout de suite pour avoir son ID
+            $this->em->flush();
         }
 
         $count = 0;
@@ -61,21 +60,18 @@ class ImportCsvCommand extends Command
         while (($data = fgetcsv($handle, 0, ';')) !== FALSE) {
             if (empty($data[0])) continue;
 
-            // 1. Année
             $anneeVal = (int)$data[0];
             $annee = $this->em->getRepository(Annee::class)->findOneBy(['annee' => $anneeVal]) ?? new Annee();
             $annee->setAnnee($anneeVal);
             $this->em->persist($annee);
 
-            // 2. Région
             $codeReg = (int)$data[3];
             $region = $this->em->getRepository(Region::class)->findOneBy(['code_region' => $codeReg]) ?? new Region();
             $region->setCodeRegion($codeReg);
-            $region->setNomRegion($data[4]); // Corrigé : setNomRegion au lieu de setNom_Region
+            $region->setNomRegion($data[4]);
             $region->setIdAdmin($admin);
             $this->em->persist($region);
 
-            // 3. Département
             $codeDep = $data[1];
             $dept = $this->em->getRepository(Departement::class)->findOneBy(['code_departement' => $codeDep]) ?? new Departement();
             $dept->setCodeDepartement($codeDep);
@@ -83,7 +79,6 @@ class ImportCsvCommand extends Command
             $dept->setIdRegion($region);
             $this->em->persist($dept);
 
-            // 4. Démographie
             $demo = new Demographie();
             $demo->setHabitants((int)$data[5]);
             $demo->setDensite($this->parseFloat($data[6]));
@@ -94,7 +89,6 @@ class ImportCsvCommand extends Command
             $demo->setIdDepartement($dept);
             $this->em->persist($demo);
 
-            // 5. Économie
             $eco = new Economie();
             $eco->setTauxChomage($this->parseFloat($data[12]));
             $eco->setTauxPauvrete($this->parseFloat($data[13]));
@@ -102,7 +96,6 @@ class ImportCsvCommand extends Command
             $eco->setIdDepartement($dept);
             $this->em->persist($eco);
 
-            // 6. Logement
             $log = new Logement();
             $log->setLogementsTotal((int)$data[14]);
             $log->setLogementsPrincipaux((int)$data[15]);
@@ -121,7 +114,7 @@ class ImportCsvCommand extends Command
             $io->progressAdvance();
         }
 
-        $this->em->flush(); // Flush final
+        $this->em->flush();
         fclose($handle);
         $io->progressFinish();
         $io->success("Importation réussie ! $count lignes persistées en base.");
@@ -129,9 +122,6 @@ class ImportCsvCommand extends Command
         return Command::SUCCESS;
     }
 
-    /**
-     * Nettoie les nombres (remplace virgule par point)
-     */
     private function parseFloat(?string $value): float
     {
         if (!$value) return 0.0;
