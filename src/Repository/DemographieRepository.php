@@ -61,4 +61,23 @@ class DemographieRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
+    public function getDemographieDynamics(int $annee, ?string $search = null): array
+    {
+        $qb = $this->createQueryBuilder('d_emo')
+            ->select('d.nom_departement as nom, d_emo.solde_naturel as naturel, d_emo.solde_migratoire as migratoire, d_emo.variation_population as variation')
+            ->join('d_emo.id_departement', 'd')
+            ->join('d_emo.id_annee', 'a')
+            ->where('a.annee = :annee')
+            ->setParameter('annee', $annee)
+            ->orderBy('d_emo.variation_population', 'DESC')
+            ->setMaxResults(15); // On prend le top 15 pour que le graphique soit lisible
+
+        if ($search) {
+            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
+               ->setParameter('search', '%' . $search . '%')
+               ->setParameter('searchExact', $search);
+        }
+
+        return $qb->getQuery()->getResult();
+    }
 }

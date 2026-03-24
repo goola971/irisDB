@@ -122,4 +122,60 @@ class LogementRepository extends ServiceEntityRepository
 
         return $qb->getQuery()->getSingleResult();
     }
+    public function getTypologieParc(int $annee, ?string $search = null): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->select('d.nom_departement as nom, l.logements_individuels as individuels, l.logements_sociaux as sociaux')
+            ->join('l.id_departement', 'd')
+            ->join('l.id_annee', 'a')
+            ->where('a.annee = :annee')
+            ->setParameter('annee', $annee)
+            ->setMaxResults(15);
+
+        if ($search) {
+            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
+               ->setParameter('search', '%' . $search . '%')
+               ->setParameter('searchExact', $search);
+        }
+
+        return $qb->getQuery()->getResult();
+    }
+    public function getVacanceEvolution(?string $search = null): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->select('d.nom_departement as nom, a.annee as annee, l.logements_vacants as vacants')
+            ->join('l.id_departement', 'd')
+            ->join('l.id_annee', 'a')
+            ->where('a.annee IN (2021, 2023)')
+            ->orderBy('d.nom_departement', 'ASC');
+
+        if ($search) {
+            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
+               ->setParameter('search', '%' . $search . '%')
+               ->setParameter('searchExact', $search);
+        } else {
+            // Si on ne cherche rien, on limite à 5 départements pour que le graphique reste lisible
+            $qb->setMaxResults(10);
+        }
+
+        return $qb->getQuery()->getResult();
+    }
+
+    public function getRepartitionEtLoyer(int $annee, ?string $search = null): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->select('AVG(l.logements_sociaux) as part_sociale, AVG(l.loyer_social) as loyer_moyen')
+            ->join('l.id_departement', 'd')
+            ->join('l.id_annee', 'a')
+            ->where('a.annee = :annee')
+            ->setParameter('annee', $annee);
+
+        if ($search) {
+            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
+               ->setParameter('search', '%' . $search . '%')
+               ->setParameter('searchExact', $search);
+        }
+
+        return $qb->getQuery()->getSingleResult();
+    }
 }
