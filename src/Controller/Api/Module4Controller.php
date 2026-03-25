@@ -10,31 +10,61 @@ use Symfony\Component\Routing\Annotation\Route;
 
 class Module4Controller extends AbstractController
 {
-    #[Route('/api/stats/module4', name: 'api_module4')]
+    #[Route('/api/stats/dashboard-module4', name: 'api_dashboard_m4')]
     public function index(LogementRepository $logRepo, Request $request): JsonResponse
     {
-        $search = $request->query->get('search');
+        $filters = [
+            'annee'  => $request->query->get('annee') ? (int)$request->query->get('annee') : 2023,
+            'region' => $request->query->get('region'),
+            'dept'   => $request->query->get('dept')
+        ];
+
+        // On récupère les stats sociales de l'année sélectionnée
+        $socialStats = $logRepo->getSocialStats($filters);
         
-        // 1. Données pour le graphique groupé (2021 vs 2023)
-        $vacanceRaw = $logRepo->getVacanceEvolution($search);
+        // On récupère l'évolution de la vacance entre 2021 et 2023
+        $vacanceEvolBrut = $logRepo->getVacanceEvolution($filters);
         
-        $formattedVacance = [];
-        foreach ($vacanceRaw as $row) {
-            $nom = $row['nom'];
-            if (!isset($formattedVacance[$nom])) {
-                $formattedVacance[$nom] = ['nom' => $nom, 'vacants2021' => 0, 'vacants2023' => 0];
+        // Formatage des données d'évolution pour Recharts [{dept: '...', v21: X, v23: Y}]
+        $vacanceEvolFormatte = [];
+        $ecartGlobal = 0;
+        
+        foreach ($vacanceEvolBrut as $row) {
+            $dept = $row['dept'];
+            if (!isset($vacanceEvolFormatte[$dept])) {
+                $vacanceEvolFormatte[$dept] = ['dept' => $dept, 'v21' => 0, 'v23' => 0];
             }
-            if ($row['annee'] == 2021) $formattedVacance[$nom]['vacants2021'] = (float)$row['vacants'];
-            if ($row['annee'] == 2023) $formattedVacance[$nom]['vacants2023'] = (float)$row['vacants'];
+            if ($row['annee'] == 2021) $vacanceEvolFormatte[$dept]['v21'] = round($row['taux'], 1);
+            if ($row['annee'] == 2023) $vacanceEvolFormatte[$dept]['v23'] = round($row['taux'], 1);
+        }
+        
+        // On ne garde que les valeurs formatées (sans les clés) et on limite au Top 8
+        $vacanceEvolFormatte = array_slice(array_values($vacanceEvolFormatte), 0, 8);
+
+        // Calcul de l'écart global moyen si on a des données
+        if (count($vacanceEvolFormatte) > 0) {
+            $v21Moyen = array_sum(array_column($vacanceEvolFormatte, 'v21')) / count($vacanceEvolFormatte);
+            $v23Moyen = array_sum(array_column($vacanceEvolFormatte, 'v23')) / count($vacanceEvolFormatte);
+            $ecartGlobal = $v23Moyen - $v21Moyen;
         }
 
-        // 2. Données pour le Doughnut et le KPI
-        $repartition = $logRepo->getRepartitionEtLoyer(2023, $search);
+        $partSociale = (float)($socialStats['partSociale'] ?? 0);
 
         return $this->json([
-            'vacance' => array_values($formattedVacance), // On remet les clés à zéro pour React
-            'partSociale' => round((float)$repartition['part_sociale'], 2),
-            'loyerMoyen' => round((float)$repartition['loyer_moyen'], 2)
+            'kpis' => [
+                'loyerMoyen' => [
+                    'value' => number_format($socialStats['loyerMoyen'] ?? 0, 2, ',', ' ') . ' €/m²'
+                ],
+                'partSociale' => [
+                    'value' => round($partSociale, 1) . ' %',
+                    'raw' => $partSociale // Pour le graphique PieChart
+                ],
+                'ecartVacance' => [
+                    'value' => ($ecartGlobal > 0 ? '+' : '') . round($ecartGlobal, 1) . ' pt',
+                    'raw' => $ecartGlobal
+                ]
+            ],
+            'vacanceEvol' => $vacanceEvolFormatte
         ]);
     }
 }

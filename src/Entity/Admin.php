@@ -6,9 +6,13 @@ use App\Repository\AdminRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+// 1. AJOUT DES DEUX IMPORTS DE SÉCURITÉ
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 #[ORM\Entity(repositoryClass: AdminRepository::class)]
-class Admin
+// 2. IMPLÉMENTATION DES INTERFACES
+class Admin implements UserInterface, PasswordAuthenticatedUserInterface
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -89,5 +93,21 @@ class Admin
         }
 
         return $this;
+    }
+
+    public function getUserIdentifier(): string
+    {
+        return (string) $this->username;
+    }
+
+    public function getRoles(): array
+    {
+        $roles = ['ROLE_ADMIN'];
+        return array_unique($roles);
+    }
+
+    
+    public function eraseCredentials(): void
+    {
     }
 }

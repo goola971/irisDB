@@ -58,4 +58,24 @@ class DemographieRepository extends ServiceEntityRepository
 
         return (float) $qb->getQuery()->getSingleScalarResult();
     }
+
+
+    public function getDynamiquesDemographiques(array $filters): array
+    {
+        $qb = $this->createQueryBuilder('demo')
+            ->select('
+                d.nom_departement as dept, 
+                AVG(demo.solde_naturel) as naturel, 
+                AVG(demo.solde_migratoire) as migratoire, 
+                (AVG(demo.solde_naturel) + AVG(demo.solde_migratoire)) as variation
+            ');
+            
+        $this->applyFilters($qb, $filters);
+        
+        $qb->groupBy('d.id')
+           ->orderBy('variation', 'DESC')
+           ->setMaxResults(15);
+           
+        return $qb->getQuery()->getResult();
+    }
 }

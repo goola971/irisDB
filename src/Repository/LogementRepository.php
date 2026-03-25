@@ -117,10 +117,51 @@ class LogementRepository extends ServiceEntityRepository
             ');
             
         $this->applyFilters($qb, $filters);
-        
-        // On trie bien sur l'alias "val"
         $qb->orderBy('val', 'DESC')->setMaxResults(10);
         
         return $qb->getQuery()->getResult();
+    }
+
+    public function getSocialStats(array $filters): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->select('
+                AVG(l.loyer_social) as loyerMoyen, 
+                AVG(l.logements_sociaux) as partSociale
+            ');
+            
+        $this->applyFilters($qb, $filters);
+        
+        return $qb->getQuery()->getSingleResult() ?? [];
+    }
+
+    public function getVacanceEvolution(array $filters): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->select('d.nom_departement as dept, a.annee, AVG(l.logements_vacants) as taux')
+            ->where('a.annee IN (2021, 2023)');
+
+        $filtersGeographiques = $filters;
+        unset($filtersGeographiques['annee']);
+        
+        $this->applyFilters($qb, $filtersGeographiques);
+
+        $qb->groupBy('d.id', 'a.annee')
+           ->orderBy('taux', 'DESC');
+           
+        return $qb->getQuery()->getResult();
+    }
+
+    public function getTypologyStats(array $filters): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->select('
+                AVG(l.logements_individuels) as partIndividuelle, 
+                AVG(l.logements_sociaux) as partSociale
+            ');
+            
+        $this->applyFilters($qb, $filters);
+        
+        return $qb->getQuery()->getSingleResult() ?? [];
     }
 }
