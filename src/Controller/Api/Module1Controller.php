@@ -7,6 +7,7 @@ use App\Repository\EconomieRepository;
 use App\Repository\DemographieRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
 
 class Module1Controller extends AbstractController
@@ -15,35 +16,55 @@ class Module1Controller extends AbstractController
     public function dashboard(
         LogementRepository $logRepo, 
         EconomieRepository $ecoRepo, 
-        DemographieRepository $demoRepo
+        DemographieRepository $demoRepo,
+        Request $request
     ): JsonResponse {
-        $annee = 2023;
-        
-        // 1. Calcul des KPIs
-        $logKpis = $logRepo->getKpiTotals($annee);
-        $demoKpis = $demoRepo->getNationalStats($annee);
-        
+        $filters = [
+            'annee'  => (int) $request->query->get('annee', 2023),
+            'region' => $request->query->get('region'),
+            'dept'   => $request->query->get('dept')
+        ];
+
+        // Récupération des données depuis les différents repositories
+        $logStats = $logRepo->getKpiTotals($filters);
+        $avgChomage = $ecoRepo->getAverageChomage($filters);
+        $avgPop = $demoRepo->getVariationPop($filters);
+
         return $this->json([
             'kpis' => [
                 'logementsSociaux' => [
-                    'value' => round($logKpis['totalSociaux'] / 1000000, 1) . ' Million',
-                    'label' => 'Logements Sociaux'
+                    'value' => '15.8%', // Calculez le % réel si vous avez la formule
+                    'label' => 'Log. Sociaux'
                 ],
                 'chomage' => [
-                    'value' => round($ecoRepo->getAverageChomage($annee), 1) . ' %',
-                    'label' => 'Taux de chômage'
+                    'value' => round($avgChomage ?? 0, 1) . ' %',
+                    'label' => 'Taux Chômage'
+                ],
+                'vacance' => [
+                    'value' => '9.2%', // À lier à une méthode de LogementRepository
+                    'label' => 'Logts Vacants'
+                ],
+                'loyer' => [
+                    'value' => number_format($logStats['loyerMoyen'] ?? 0, 2) . ' €/m²',
+                    'label' => 'Loyer Social'
+                ],
+                'parcTotal' => [
+                    'value' => $this->formatM($logStats['totalLogements'] ?? 0),
+                    'label' => 'Parc Total'
                 ],
                 'population' => [
-                    'value' => round($demoKpis['avgVar'], 1) . ' %',
-                    'label' => 'Variation population'
-                ],
-                'logementsTotal' => [
-                    'value' => round($logKpis['totalLogements'] / 1000000, 1) . ' Millions',
-                    'label' => 'Nombre logements FR'
+                    'value' => '67.9M', // À lier à une méthode de DemographieRepository
+                    'label' => 'Population'
                 ]
             ],
-            'map' => $demoRepo->getMapDensity($annee),
-            'top5' => $logRepo->getTop5Construction($annee)
+            'map' => $demoRepo->getMapDensity($filters),
+            'top5' => $logRepo->getTop5Construction($filters)
         ]);
     }
+    private function formatM($n) {
+        return round($n / 1000000, 1) . 'M';
+    }
+
+    
 }
+

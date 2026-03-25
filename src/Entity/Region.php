@@ -7,6 +7,8 @@ use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use ApiPlatform\Metadata\ApiResource;
+// Import indispensable pour couper la boucle infinie
+use Symfony\Component\Serializer\Annotation\Ignore;
 
 #[ApiResource]
 #[ORM\Entity(repositoryClass: RegionRepository::class)]
@@ -23,9 +25,11 @@ class Region
     #[ORM\Column(length: 100)]
     private ?string $nom_region = null;
 
+    #[Ignore]
     #[ORM\ManyToOne(inversedBy: 'regions')]
     private ?Admin $idAdmin = null;
 
+    #[Ignore]
     #[ORM\OneToMany(targetEntity: Departement::class, mappedBy: 'id_region')]
     private Collection $departements;
 

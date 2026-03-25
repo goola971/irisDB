@@ -5,6 +5,7 @@ namespace App\Repository;
 use App\Entity\Logement;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Doctrine\ORM\QueryBuilder;
 
 /**
  * @extends ServiceEntityRepository<Logement>
@@ -16,166 +17,110 @@ class LogementRepository extends ServiceEntityRepository
         parent::__construct($registry, Logement::class);
     }
 
-    //    /**
-    //     * @return Logement[] Returns an array of Logement objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('l')
-    //            ->andWhere('l.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('l.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
-
-    //    public function findOneBySomeField($value): ?Logement
-    //    {
-    //        return $this->createQueryBuilder('l')
-    //            ->andWhere('l.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
-    public function getKpiTotals(int $annee): array
+    private function applyFilters(QueryBuilder $qb, array $filters): QueryBuilder
     {
-        return $this->createQueryBuilder('l')
-            ->select('SUM(l.logements_sociaux) as totalSociaux, SUM(l.logements_total) as totalLogements')
-            ->join('l.id_annee', 'a')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee)
-            ->getQuery()
-            ->getSingleResult();
+        $qb->join('l.id_annee', 'a')
+           ->join('l.id_departement', 'd')
+           ->where('a.annee = :annee')
+           ->setParameter('annee', $filters['annee'] ?? 2023);
+
+        if (!empty($filters['dept'])) {
+            $qb->andWhere('d.nom_departement = :dept')
+               ->setParameter('dept', $filters['dept']);
+        } 
+        elseif (!empty($filters['region'])) {
+            $qb->join('d.id_region', 'r')
+               ->andWhere('r.id = :regionId')
+               ->setParameter('regionId', $filters['region']);
+        }
+
+        return $qb;
     }
 
-    public function getTop5Construction(int $annee): array
+   
+    public function getKpiTotals(array $filters): array
     {
-        // On simule la construction par la somme des logements total pour l'exemple
-        return $this->createQueryBuilder('l')
-            ->select('d.code_departement as code, SUM(l.logements_total) as value')
-            ->join('l.id_departement', 'd')
-            ->join('l.id_annee', 'a')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee)
-            ->groupBy('d.code_departement')
-            ->orderBy('value', 'DESC')
+        $qb = $this->createQueryBuilder('l')
+            ->select('
+                SUM(l.logements_sociaux) as totalSociaux, 
+                AVG(l.loyer_social) as loyerMoyen,
+                SUM(l.logements_total) as totalLogements
+            ');
+
+        $this->applyFilters($qb, $filters);
+
+        return $qb->getQuery()->getSingleResult();
+    }
+
+    
+    public function getTop5Construction(array $filters): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->select('d.nom_departement as name, l.logements_total as val');
+
+        $this->applyFilters($qb, $filters);
+
+        return $qb->orderBy('l.logements_total', 'DESC')
             ->setMaxResults(5)
             ->getQuery()
             ->getResult();
     }
-    public function getVacanceParRegion(int $annee, ?string $search = null): array
+
+    
+    public function getVacanceParRegion(array $filters): array
     {
         $qb = $this->createQueryBuilder('l')
-            ->select('r.nom_region as region, AVG(l.logements_vacants) as taux_vacance')
-            ->join('l.id_departement', 'd')
-            ->join('d.id_region', 'r')
-            ->join('l.id_annee', 'a')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee)
+            ->select('r.nom_region as region, (SUM(l.logements_vacants) / NULLIF(SUM(l.logements_total), 0)) * 100 as taux_vacance');
+
+        // 1. On appelle applyFilters EN PREMIER pour qu'il crée proprement l'alias 'd' (Département)
+        $this->applyFilters($qb, $filters);
+
+        // 2. Maintenant que 'd' existe dans la requête, on peut joindre la Région ('r') en toute sécurité
+        return $qb->join('d.id_region', 'r')
             ->groupBy('r.id')
-            ->orderBy('taux_vacance', 'DESC');
+            ->orderBy('taux_vacance', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
 
-        if ($search) {
-            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
-               ->setParameter('search', '%' . $search . '%')
-               ->setParameter('searchExact', $search);
-        }
+    public function getTypologieParc(array $filters): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->select('d.nom_departement as nom, l.logements_individuels as individuels, l.logements_sociaux as sociaux');
 
+        $this->applyFilters($qb, $filters);
+
+        return $qb->setMaxResults(15)->getQuery()->getResult();
+    }
+
+
+    public function getVacanceStats(array $filters): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->select('
+                (SUM(l.logements_vacants) * 100.0 / NULLIF(SUM(l.logements_total), 0)) as moyenneVacance, 
+                (SUM(l.logements_principaux) * 100.0 / NULLIF(SUM(l.logements_total), 0)) as moyennePrincipale,
+                ((SUM(l.logements_total) - SUM(l.logements_principaux) - SUM(l.logements_vacants)) * 100.0 / NULLIF(SUM(l.logements_total), 0)) as moyenneSecondaire
+            ');
+        
+        $this->applyFilters($qb, $filters);
+        
+        return $qb->getQuery()->getSingleResult() ?? [];
+    }
+
+    public function getVacanceDistribution(array $filters): array
+    {
+        $qb = $this->createQueryBuilder('l')
+            ->select('
+                d.nom_departement as name, 
+                (l.logements_vacants * 100.0 / NULLIF(l.logements_total, 0)) as val
+            ');
+            
+        $this->applyFilters($qb, $filters);
+        
+        // On trie bien sur l'alias "val"
+        $qb->orderBy('val', 'DESC')->setMaxResults(10);
+        
         return $qb->getQuery()->getResult();
-    }
-
-    public function getIndividuelVsSocialCorrelation(int $annee, ?string $search = null): array
-    {
-        $qb = $this->createQueryBuilder('l')
-            ->select('d.nom_departement as nom, l.logements_individuels as x, l.logements_sociaux as y')
-            ->join('l.id_departement', 'd')
-            ->join('l.id_annee', 'a')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee);
-
-        if ($search) {
-            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
-               ->setParameter('search', '%' . $search . '%')
-               ->setParameter('searchExact', $search);
-        }
-
-        return $qb->getQuery()->getResult();
-    }
-
-    public function getKpiPrincipaux(int $annee, ?string $search = null): array
-    {
-        $qb = $this->createQueryBuilder('l')
-            ->select('SUM(l.logements_principaux) as principaux, SUM(l.logements_total) as total')
-            ->join('l.id_annee', 'a')
-            ->join('l.id_departement', 'd')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee);
-
-        if ($search) {
-            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
-               ->setParameter('search', '%' . $search . '%')
-               ->setParameter('searchExact', $search);
-        }
-
-        return $qb->getQuery()->getSingleResult();
-    }
-    public function getTypologieParc(int $annee, ?string $search = null): array
-    {
-        $qb = $this->createQueryBuilder('l')
-            ->select('d.nom_departement as nom, l.logements_individuels as individuels, l.logements_sociaux as sociaux')
-            ->join('l.id_departement', 'd')
-            ->join('l.id_annee', 'a')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee)
-            ->setMaxResults(15);
-
-        if ($search) {
-            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
-               ->setParameter('search', '%' . $search . '%')
-               ->setParameter('searchExact', $search);
-        }
-
-        return $qb->getQuery()->getResult();
-    }
-    public function getVacanceEvolution(?string $search = null): array
-    {
-        $qb = $this->createQueryBuilder('l')
-            ->select('d.nom_departement as nom, a.annee as annee, l.logements_vacants as vacants')
-            ->join('l.id_departement', 'd')
-            ->join('l.id_annee', 'a')
-            ->where('a.annee IN (2021, 2023)')
-            ->orderBy('d.nom_departement', 'ASC');
-
-        if ($search) {
-            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
-               ->setParameter('search', '%' . $search . '%')
-               ->setParameter('searchExact', $search);
-        } else {
-            // Si on ne cherche rien, on limite à 5 départements pour que le graphique reste lisible
-            $qb->setMaxResults(10);
-        }
-
-        return $qb->getQuery()->getResult();
-    }
-
-    public function getRepartitionEtLoyer(int $annee, ?string $search = null): array
-    {
-        $qb = $this->createQueryBuilder('l')
-            ->select('AVG(l.logements_sociaux) as part_sociale, AVG(l.loyer_social) as loyer_moyen')
-            ->join('l.id_departement', 'd')
-            ->join('l.id_annee', 'a')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee);
-
-        if ($search) {
-            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
-               ->setParameter('search', '%' . $search . '%')
-               ->setParameter('searchExact', $search);
-        }
-
-        return $qb->getQuery()->getSingleResult();
     }
 }

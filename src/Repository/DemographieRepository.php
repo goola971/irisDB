@@ -5,10 +5,8 @@ namespace App\Repository;
 use App\Entity\Demographie;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Doctrine\ORM\QueryBuilder;
 
-/**
- * @extends ServiceEntityRepository<Demographie>
- */
 class DemographieRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
@@ -16,68 +14,48 @@ class DemographieRepository extends ServiceEntityRepository
         parent::__construct($registry, Demographie::class);
     }
 
-    //    /**
-    //     * @return Demographie[] Returns an array of Demographie objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('d')
-    //            ->andWhere('d.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('d.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
+    /**
+     * Centralisation du filtrage pour la démographie
+     */
+    private function applyFilters(QueryBuilder $qb, array $filters): QueryBuilder
+    {
+        $qb->join('demo.id_annee', 'a')
+           ->join('demo.id_departement', 'd')
+           ->where('a.annee = :annee')
+           ->setParameter('annee', $filters['annee'] ?? 2023);
 
-    //    public function findOneBySomeField($value): ?Demographie
-    //    {
-    //        return $this->createQueryBuilder('d')
-    //            ->andWhere('d.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
-    public function getNationalStats(int $annee): array
-    {
-        return $this->createQueryBuilder('d')
-            ->select('AVG(d.variation_population) as avgVar, AVG(d.densite) as avgDensite')
-            ->join('d.id_annee', 'a')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee)
-            ->getQuery()
-            ->getSingleResult();
-    }
-    public function getMapDensity(int $annee): array
-    {
-        return $this->createQueryBuilder('d')
-            ->select('dept.code_departement as code, d.densite as value')
-            ->join('d.id_departement', 'dept')
-            ->join('d.id_annee', 'a')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee)
-            ->getQuery()
-            ->getResult();
-    }
-    public function getDemographieDynamics(int $annee, ?string $search = null): array
-    {
-        $qb = $this->createQueryBuilder('d_emo')
-            ->select('d.nom_departement as nom, d_emo.solde_naturel as naturel, d_emo.solde_migratoire as migratoire, d_emo.variation_population as variation')
-            ->join('d_emo.id_departement', 'd')
-            ->join('d_emo.id_annee', 'a')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee)
-            ->orderBy('d_emo.variation_population', 'DESC')
-            ->setMaxResults(15); // On prend le top 15 pour que le graphique soit lisible
-
-        if ($search) {
-            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
-               ->setParameter('search', '%' . $search . '%')
-               ->setParameter('searchExact', $search);
+        if (!empty($filters['dept'])) {
+            $qb->andWhere('d.nom_departement = :dept')
+               ->setParameter('dept', $filters['dept']);
+        } elseif (!empty($filters['region'])) {
+            $qb->join('d.id_region', 'r')
+               ->andWhere('r.id = :regionId')
+               ->setParameter('regionId', $filters['region']);
         }
 
-        return $qb->getQuery()->getResult();
+        return $qb;
+    }
+
+    public function getMapDensity(array $filters): array
+    {
+        $qb = $this->createQueryBuilder('demo')
+            ->select('d.nom_departement as name, demo.densite as val');
+
+        $this->applyFilters($qb, $filters);
+
+        return $qb->orderBy('demo.densite', 'DESC')
+                  ->setMaxResults(8)
+                  ->getQuery()
+                  ->getResult();
+    }
+
+    public function getVariationPop(array $filters): ?float
+    {
+        $qb = $this->createQueryBuilder('demo')
+            ->select('AVG(demo.variation_population)');
+
+        $this->applyFilters($qb, $filters);
+
+        return (float) $qb->getQuery()->getSingleScalarResult();
     }
 }

@@ -7,6 +7,7 @@ use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use ApiPlatform\Metadata\ApiResource;
+use Symfony\Component\Serializer\Annotation\Ignore;
 
 #[ApiResource]
 #[ORM\Entity(repositoryClass: DepartementRepository::class)]
@@ -23,24 +24,30 @@ class Departement
     #[ORM\Column(length: 100)]
     private ?string $nom_departement = null;
 
+    // Ajout de l'Ignore pour couper la boucle avec Region
+    #[Ignore]
     #[ORM\ManyToOne(inversedBy: 'departements')]
     private ?Region $id_region = null;
 
     /**
      * @var Collection<int, Demographie>
      */
+    // Ajout de l'Ignore pour éviter de charger les données liées dans le filtre
+    #[Ignore]
     #[ORM\OneToMany(targetEntity: Demographie::class, mappedBy: 'id_departement')]
     private Collection $demographies;
 
     /**
      * @var Collection<int, Economie>
      */
+    #[Ignore]
     #[ORM\OneToMany(targetEntity: Economie::class, mappedBy: 'id_departement')]
     private Collection $economies;
 
     /**
      * @var Collection<int, Logement>
      */
+    #[Ignore]
     #[ORM\OneToMany(targetEntity: Logement::class, mappedBy: 'id_departement')]
     private Collection $logements;
 
@@ -64,7 +71,6 @@ class Departement
     public function setCodeDepartement(string $code_departement): static
     {
         $this->code_departement = $code_departement;
-
         return $this;
     }
 
@@ -76,7 +82,6 @@ class Departement
     public function setNomDepartement(string $nom_departement): static
     {
         $this->nom_departement = $nom_departement;
-
         return $this;
     }
 
@@ -88,7 +93,6 @@ class Departement
     public function setIdRegion(?Region $id_region): static
     {
         $this->id_region = $id_region;
-
         return $this;
     }
 
@@ -106,19 +110,16 @@ class Departement
             $this->demographies->add($demography);
             $demography->setIdDepartement($this);
         }
-
         return $this;
     }
 
     public function removeDemography(Demographie $demography): static
     {
         if ($this->demographies->removeElement($demography)) {
-            // set the owning side to null (unless already changed)
             if ($demography->getIdDepartement() === $this) {
                 $demography->setIdDepartement(null);
             }
         }
-
         return $this;
     }
 
@@ -136,19 +137,16 @@ class Departement
             $this->economies->add($economy);
             $economy->setIdDepartement($this);
         }
-
         return $this;
     }
 
     public function removeEconomy(Economie $economy): static
     {
         if ($this->economies->removeElement($economy)) {
-            // set the owning side to null (unless already changed)
             if ($economy->getIdDepartement() === $this) {
                 $economy->setIdDepartement(null);
             }
         }
-
         return $this;
     }
 
@@ -166,19 +164,16 @@ class Departement
             $this->logements->add($logement);
             $logement->setIdDepartement($this);
         }
-
         return $this;
     }
 
     public function removeLogement(Logement $logement): static
     {
         if ($this->logements->removeElement($logement)) {
-            // set the owning side to null (unless already changed)
             if ($logement->getIdDepartement() === $this) {
                 $logement->setIdDepartement(null);
             }
         }
-
         return $this;
     }
 }

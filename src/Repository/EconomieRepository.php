@@ -5,10 +5,8 @@ namespace App\Repository;
 use App\Entity\Economie;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Doctrine\ORM\QueryBuilder;
 
-/**
- * @extends ServiceEntityRepository<Economie>
- */
 class EconomieRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
@@ -16,81 +14,52 @@ class EconomieRepository extends ServiceEntityRepository
         parent::__construct($registry, Economie::class);
     }
 
-    //    /**
-    //     * @return Economie[] Returns an array of Economie objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('e')
-    //            ->andWhere('e.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('e.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
-
-    //    public function findOneBySomeField($value): ?Economie
-    //    {
-    //        return $this->createQueryBuilder('e')
-    //            ->andWhere('e.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
-    // 1. Corrélation Pauvreté / Logement Social (Scatter Plot)
-    public function getAverageChomage(int $annee): float 
+    private function applyFilters(QueryBuilder $qb, array $filters): QueryBuilder
     {
-        return (float) $this->createQueryBuilder('e')
-            ->select('AVG(e.taux_chomage)')
-            ->join('e.id_annee', 'a')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee)
-            ->getQuery()
-            ->getSingleScalarResult();
+        $qb->join('e.id_annee', 'a')
+           ->join('e.id_departement', 'd')
+           ->where('a.annee = :annee')
+           ->setParameter('annee', $filters['annee'] ?? 2023);
+
+        if (!empty($filters['dept'])) {
+            $qb->andWhere('d.nom_departement = :dept')
+               ->setParameter('dept', $filters['dept']);
+        } elseif (!empty($filters['region'])) {
+            $qb->join('d.id_region', 'r')
+               ->andWhere('r.id = :regionId')
+               ->setParameter('regionId', $filters['region']);
+        }
+
+        return $qb;
     }
 
-    public function getCorrelationData(int $annee, ?string $search = null): array
+    public function getAverageChomage(array $filters): ?float
     {
         $qb = $this->createQueryBuilder('e')
-            ->select('d.code_departement as code, d.nom_departement as name, e.taux_pauvrete as x, l.logements_sociaux as y')
-            ->join('e.id_departement', 'd')
-            ->join('App\Entity\Logement', 'l', 'WITH', 'l.id_departement = d.id')
-            ->join('e.id_annee', 'a')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee);
+            ->select('AVG(e.taux_chomage)');
 
-        // Si on a une recherche, on filtre par nom ou par code
-        if ($search) {
-            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
-            ->setParameter('search', '%' . $search . '%')
-            ->setParameter('searchExact', $search);
-        }
+        $this->applyFilters($qb, $filters);
+
+        return (float) $qb->getQuery()->getSingleScalarResult();
+    }
+
+    public function getAveragePauvrete(array $filters): ?float
+    {
+        $qb = $this->createQueryBuilder('e')->select('AVG(e.taux_pauvrete)');
+        
+        $this->applyFilters($qb, $filters);
+        
+        return (float) $qb->getQuery()->getSingleScalarResult();
+    }
+
+    public function getCorrelationData(array $filters): array
+    {
+        $qb = $this->createQueryBuilder('e')
+            ->select('d.nom_departement as dept, e.taux_pauvrete as x, l.logements_sociaux as y')
+            ->join('App\Entity\Logement', 'l', 'WITH', 'l.id_departement = e.id_departement AND l.id_annee = e.id_annee');
+
+        $this->applyFilters($qb, $filters);
 
         return $qb->getQuery()->getResult();
-    }
-
-    public function getTopChomageLoyer(int $annee, ?string $search = null): array
-    {
-        $qb = $this->createQueryBuilder('e')
-            ->select('d.nom_departement as name, e.taux_chomage as chomage, l.loyer_social as loyer, l.logements_total as size')
-            ->join('e.id_departement', 'd')
-            ->join('App\Entity\Logement', 'l', 'WITH', 'l.id_departement = d.id')
-            ->join('e.id_annee', 'a')
-            ->where('a.annee = :annee')
-            ->setParameter('annee', $annee);
-
-        if ($search) {
-            $qb->andWhere('d.nom_departement LIKE :search OR d.code_departement = :searchExact')
-            ->setParameter('search', '%' . $search . '%')
-            ->setParameter('searchExact', $search);
-        }
-
-        return $qb->orderBy('e.taux_chomage', 'DESC')
-            ->setMaxResults(10)
-            ->getQuery()
-            ->getResult();
     }
 }
