@@ -14,57 +14,65 @@ class Module1Controller extends AbstractController
 {
     #[Route('/api/stats/dashboard-module1', name: 'api_dashboard_m1')]
     public function dashboard(
-        LogementRepository $logRepo, 
-        EconomieRepository $ecoRepo, 
+        LogementRepository    $logRepo,
+        EconomieRepository    $ecoRepo,
         DemographieRepository $demoRepo,
-        Request $request
+        Request               $request
     ): JsonResponse {
+
         $filters = [
             'annee'  => (int) $request->query->get('annee', 2023),
-            'region' => $request->query->get('region'),
-            'dept'   => $request->query->get('dept')
+            'region' => $request->query->get('region') ?: null,
+            'dept'   => $request->query->get('dept')   ?: null,
         ];
 
-        // Récupération des données depuis les différents repositories
-        $logStats = $logRepo->getKpiTotals($filters);
+        // ── KPIs ──
+        $logStats   = $logRepo->getKpiTotals($filters);
         $avgChomage = $ecoRepo->getAverageChomage($filters);
-        $avgPop = $demoRepo->getVariationPop($filters);
+
+        // ── Graphique 1a : Top 10 ──
+        $top10 = $logRepo->getTop10TauxSociaux($filters);
+
+        // ── Graphique 1b : Bottom 10 ──
+        $bottom10 = $logRepo->getBottom10TauxSociaux($filters);
+
+        // ── Graphique 2 : Évolution 2021-2023 par région ──
+        $evolution = $logRepo->getEvolutionParRegion([
+            'region' => $filters['region'],
+            'dept'   => $filters['dept'],
+        ]);
+
+        // ── Graphique 3 : Construction comparatif ──
+        $construction = $logRepo->getConstructionComparatif([
+            'region' => $filters['region'],
+            'dept'   => $filters['dept'],
+        ]);
+
+        $tauxSociaux = (float) ($logStats['tauxSociaux']    ?? 0);
+        $tauxVacance = (float) ($logStats['tauxVacance']    ?? 0);
+        $loyerMoyen  = (float) ($logStats['loyerMoyen']     ?? 0);
+        $totalLog    = (float) ($logStats['totalLogements']  ?? 0);
 
         return $this->json([
             'kpis' => [
-                'logementsSociaux' => [
-                    'value' => '15.8%', // Calculez le % réel si vous avez la formule
-                    'label' => 'Log. Sociaux'
-                ],
-                'chomage' => [
-                    'value' => round($avgChomage ?? 0, 1) . ' %',
-                    'label' => 'Taux Chômage'
-                ],
-                'vacance' => [
-                    'value' => '9.2%', // À lier à une méthode de LogementRepository
-                    'label' => 'Logts Vacants'
-                ],
-                'loyer' => [
-                    'value' => number_format($logStats['loyerMoyen'] ?? 0, 2) . ' €/m²',
-                    'label' => 'Loyer Social'
-                ],
-                'parcTotal' => [
-                    'value' => $this->formatM($logStats['totalLogements'] ?? 0),
-                    'label' => 'Parc Total'
-                ],
-                'population' => [
-                    'value' => '67.9M', // À lier à une méthode de DemographieRepository
-                    'label' => 'Population'
-                ]
+                'logementsSociaux' => ['value' => round($tauxSociaux, 1) . ' %',  'label' => 'Log. Sociaux'],
+                'chomage'          => ['value' => round((float)($avgChomage ?? 0), 1) . ' %', 'label' => 'Taux Chômage'],
+                'vacance'          => ['value' => round($tauxVacance, 1) . ' %',  'label' => 'Logts Vacants'],
+                'loyer'            => ['value' => number_format($loyerMoyen, 2, ',', ' ') . ' €/m²', 'label' => 'Loyer Social'],
+                'parcTotal'        => ['value' => $this->formatMillions($totalLog), 'label' => 'Parc Total'],
+                'population'       => ['value' => '—', 'label' => 'Population'],
             ],
-            'map' => $demoRepo->getMapDensity($filters),
-            'top5' => $logRepo->getTop5Construction($filters)
+            'top10'        => $top10,
+            'bottom10'     => $bottom10,
+            'evolution'    => $evolution,
+            'construction' => $construction,
         ]);
     }
-    private function formatM($n) {
-        return round($n / 1000000, 1) . 'M';
+
+    private function formatMillions(float $n): string
+    {
+        if ($n >= 1_000_000) return round($n / 1_000_000, 1) . ' M';
+        if ($n >= 1_000)     return round($n / 1_000, 1)     . ' k';
+        return (string) round($n, 0);
     }
-
-    
 }
-

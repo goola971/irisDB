@@ -31,9 +31,6 @@ class StatsController extends AbstractController
         ]);
     }
 
-    /**
-     * Route pour les KPIs et graphiques du Module 1
-     */
     #[Route('/api/stats/dashboard-module1', name: 'api_dashboard_m1')]
     public function dashboard(
         LogementRepository $logRepo, 
@@ -47,10 +44,16 @@ class StatsController extends AbstractController
             'dept'   => $request->query->get('dept')
         ];
 
-        // Récupération des données filtrées via tes Repositories
+        // 1. Récupération des données pour les KPIs
         $logStats = $logRepo->getKpiTotals($filters);
         $avgChomage = $ecoRepo->getAverageChomage($filters);
 
+        // 2. NOUVEAU : Récupération des données spécifiques pour les graphiques du Module 1
+        $top10 = $logRepo->getModule1Top10($filters);
+        $bottom10 = $logRepo->getModule1Bottom10($filters);
+        $evolution = $logRepo->getModule1Evolution($filters);
+
+        // 3. Construction de la réponse JSON
         return $this->json([
             'kpis' => [
                 'logementsSociaux' => ['value' => '15.8%', 'label' => 'Log. Sociaux'],
@@ -60,8 +63,10 @@ class StatsController extends AbstractController
                 'parcTotal' => ['value' => round(($logStats['totalLogements'] ?? 0) / 1000000, 1) . 'M', 'label' => 'Parc Total'],
                 'population' => ['value' => '67.9M', 'label' => 'Population']
             ],
-            'map' => $demoRepo->getMapDensity($filters),
-            'top5' => $logRepo->getTop5Construction($filters)
+            // On remplace les anciennes clés (map, top5) par les nouvelles :
+            'top10' => $top10,
+            'bottom10' => $bottom10,
+            'evolution' => $evolution
         ]);
     }
 }

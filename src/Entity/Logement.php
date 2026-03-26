@@ -34,6 +34,17 @@ class Logement
     #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 2)]
     private ?string $loyer_social = null;
 
+    // --- NOUVELLES COLONNES POUR LE MODULE 3 (ÉNERGIE) ---
+    #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 2, nullable: true)]
+    private ?string $taux_energivores = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 2, nullable: true)]
+    private ?string $age_moyen = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?int $logements_demolis = null;
+    // -----------------------------------------------------
+
     #[ORM\ManyToOne(inversedBy: 'logements')]
     private ?Annee $id_annee = null;
 
@@ -53,7 +64,6 @@ class Logement
     public function setLogementsTotal(int $logements_total): static
     {
         $this->logements_total = $logements_total;
-
         return $this;
     }
 
@@ -65,7 +75,6 @@ class Logement
     public function setLogementsPrincipaux(int $logements_principaux): static
     {
         $this->logements_principaux = $logements_principaux;
-
         return $this;
     }
 
@@ -77,7 +86,6 @@ class Logement
     public function setLogementsSociaux(string $logements_sociaux): static
     {
         $this->logements_sociaux = $logements_sociaux;
-
         return $this;
     }
 
@@ -89,7 +97,6 @@ class Logement
     public function setLogementsIndividuels(string $logements_individuels): static
     {
         $this->logements_individuels = $logements_individuels;
-
         return $this;
     }
 
@@ -101,7 +108,6 @@ class Logement
     public function setLogementsVacants(string $logements_vacants): static
     {
         $this->logements_vacants = $logements_vacants;
-
         return $this;
     }
 
@@ -113,7 +119,6 @@ class Logement
     public function setLoyerSocial(string $loyer_social): static
     {
         $this->loyer_social = $loyer_social;
-
         return $this;
     }
 
@@ -125,7 +130,6 @@ class Logement
     public function setIdAnnee(?Annee $id_annee): static
     {
         $this->id_annee = $id_annee;
-
         return $this;
     }
 
@@ -137,7 +141,40 @@ class Logement
     public function setIdDepartement(?Departement $id_departement): static
     {
         $this->id_departement = $id_departement;
+        return $this;
+    }
 
+    // --- GETTERS ET SETTERS POUR LES NOUVELLES COLONNES ---
+    public function getTauxEnergivores(): ?string
+    {
+        return $this->taux_energivores;
+    }
+
+    public function setTauxEnergivores(?string $taux_energivores): static
+    {
+        $this->taux_energivores = $taux_energivores;
+        return $this;
+    }
+
+    public function getAgeMoyen(): ?string
+    {
+        return $this->age_moyen;
+    }
+
+    public function setAgeMoyen(?string $age_moyen): static
+    {
+        $this->age_moyen = $age_moyen;
+        return $this;
+    }
+
+    public function getLogementsDemolis(): ?int
+    {
+        return $this->logements_demolis;
+    }
+
+    public function setLogementsDemolis(?int $logements_demolis): static
+    {
+        $this->logements_demolis = $logements_demolis;
         return $this;
     }
 }
